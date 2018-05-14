@@ -293,28 +293,28 @@ func (c *TriggerController) syncHandler(key string) error {
 	if newDataHash == oldDataHash {
 		glog.V(5).Infof("No change detected in hash for %s/%s", objMeta.GetNamespace(), objMeta.GetName())
 		return nil
-	}
-
-	switch kind {
-	case "configMap":
-		objCopy := obj.(*corev1.ConfigMap).DeepCopy()
-		objCopy.Annotations[v1alpha1.TriggerDataHashAnnotation] = newDataHash
-		glog.V(3).Infof("Updating configMap %s/%s with new data hash: %v", objCopy.Namespace, objCopy.Name, newDataHash)
-		if _, err := c.client.CoreV1().ConfigMaps(objCopy.Namespace).Update(objCopy); err != nil {
-			if errors.IsNotFound(err) {
-				return nil
+	} else {
+		switch kind {
+		case "configMap":
+			objCopy := obj.(*corev1.ConfigMap).DeepCopy()
+			objCopy.Annotations[v1alpha1.TriggerDataHashAnnotation] = newDataHash
+			glog.V(3).Infof("Updating configMap %s/%s with new data hash: %v", objCopy.Namespace, objCopy.Name, newDataHash)
+			if _, err := c.client.CoreV1().ConfigMaps(objCopy.Namespace).Update(objCopy); err != nil {
+				if errors.IsNotFound(err) {
+					return nil
+				}
+				return err
 			}
-			return err
-		}
-	case "secret":
-		objCopy := obj.(*corev1.Secret).DeepCopy()
-		objCopy.Annotations[v1alpha1.TriggerDataHashAnnotation] = newDataHash
-		glog.V(3).Infof("Updating secret %s/%s with new data hash: %v", objCopy.Namespace, objCopy.Name, newDataHash)
-		if _, err := c.client.CoreV1().Secrets(objCopy.Namespace).Update(objCopy); err != nil {
-			if errors.IsNotFound(err) {
-				return nil
+		case "secret":
+			objCopy := obj.(*corev1.Secret).DeepCopy()
+			objCopy.Annotations[v1alpha1.TriggerDataHashAnnotation] = newDataHash
+			glog.V(3).Infof("Updating secret %s/%s with new data hash: %v", objCopy.Namespace, objCopy.Name, newDataHash)
+			if _, err := c.client.CoreV1().Secrets(objCopy.Namespace).Update(objCopy); err != nil {
+				if errors.IsNotFound(err) {
+					return nil
+				}
+				return err
 			}
-			return err
 		}
 	}
 
