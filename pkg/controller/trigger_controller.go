@@ -74,6 +74,8 @@ func NewTriggerController(
 		deploymentClient: kubeclientset.AppsV1(),
 		workqueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "data-version"),
 		recorder:         recorder,
+		secretsLister:    secretInformer.Lister(),
+		configMapsLister: configMapInformer.Lister(),
 	}
 
 	controller.configMapsSynced = configMapInformer.Informer().HasSynced
