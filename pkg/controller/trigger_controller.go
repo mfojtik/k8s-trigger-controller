@@ -199,16 +199,15 @@ func (c *TriggerController) enqueueObject(prefix string, old, new interface{}) {
 	if len(deployments) == 0 {
 		return
 	}
+	glog.V(5).Infof("enqueuing %s%#v", prefix, new)
 	c.workqueue.AddRateLimited(prefix + key)
 }
 
 func (c *TriggerController) enqueueConfigMap(old, new interface{}) {
-	glog.V(5).Infof("enqueuing configMap %#v", new)
 	c.enqueueObject(configMapPrefix, old, new)
 }
 
 func (c *TriggerController) enqueueSecret(old, new interface{}) {
-	glog.V(5).Infof("enqueuing secret %#v", new)
 	c.enqueueObject(secretPrefix, old, new)
 }
 
