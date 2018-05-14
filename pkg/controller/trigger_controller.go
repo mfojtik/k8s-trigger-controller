@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"github.com/mfojtik/trigger-controller/pkg/apis/trigger/v1alpha1"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -25,6 +25,8 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
+
+	"github.com/mfojtik/trigger-controller/pkg/apis/trigger/v1alpha1"
 )
 
 const (
@@ -193,10 +195,12 @@ func (c *TriggerController) enqueueObject(prefix string, old, new interface{}) {
 }
 
 func (c *TriggerController) enqueueConfigMap(old, new interface{}) {
+	glog.V(5).Infof("enqueuing configMap %#v", new)
 	c.enqueueObject(configMapPrefix, old, new)
 }
 
 func (c *TriggerController) enqueueSecret(old, new interface{}) {
+	glog.V(5).Infof("enqueuing secret %#v", new)
 	c.enqueueObject(secretPrefix, old, new)
 }
 
@@ -278,6 +282,7 @@ func (c *TriggerController) syncHandler(key string) error {
 	oldDataHash := objMeta.GetAnnotations()[v1alpha1.TriggerDataHashAnnotation]
 
 	if newDataHash == oldDataHash {
+		glog.V(5).Infof("No change detected in hash for %s/%s", objMeta.GetNamespace(), objMeta.GetName())
 		return nil
 	}
 
@@ -285,6 +290,7 @@ func (c *TriggerController) syncHandler(key string) error {
 	case "configMap":
 		objCopy := obj.(*corev1.ConfigMap).DeepCopy()
 		objCopy.Annotations[v1alpha1.TriggerDataHashAnnotation] = newDataHash
+		glog.V(3).Infof("Updating configMap %s/%s with new data hash: %v", objCopy.Namespace, objCopy.Name, newDataHash)
 		if _, err := c.client.CoreV1().ConfigMaps(objCopy.Namespace).Update(objCopy); err != nil {
 			if errors.IsNotFound(err) {
 				return nil
@@ -294,6 +300,7 @@ func (c *TriggerController) syncHandler(key string) error {
 	case "secret":
 		objCopy := obj.(*corev1.Secret).DeepCopy()
 		objCopy.Annotations[v1alpha1.TriggerDataHashAnnotation] = newDataHash
+		glog.V(3).Infof("Updating secret %s/%s with new data hash: %v", objCopy.Namespace, objCopy.Name, newDataHash)
 		if _, err := c.client.CoreV1().Secrets(objCopy.Namespace).Update(objCopy); err != nil {
 			if errors.IsNotFound(err) {
 				return nil
@@ -318,9 +325,11 @@ func (c *TriggerController) syncHandler(key string) error {
 	for _, d := range deployments {
 		// Skip paused triggers
 		if d.State != v1alpha1.TriggerEnabled {
+			glog.V(3).Infof("Trigger for %s/%s is not enabled, skipping", objMeta.GetNamespace(), objMeta.GetName())
 			continue
 		}
 		name, namespace, err := cache.SplitMetaNamespaceKey(d.Name)
+		glog.V(3).Infof("Checking if deployment %s/%s hash for %s/%s is %v", namespace, name, objMeta.GetNamespace(), objMeta.GetName(), newDataHash)
 		if err != nil {
 			runtimeutil.HandleError(err)
 			continue
@@ -329,7 +338,6 @@ func (c *TriggerController) syncHandler(key string) error {
 			handleErrors = append(handleErrors, err)
 			continue
 		}
-
 	}
 
 	if len(handleErrors) != 0 {

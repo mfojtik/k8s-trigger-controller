@@ -5,9 +5,11 @@ import (
 	"strings"
 
 	"github.com/golang/glog"
-	"github.com/mfojtik/trigger-controller/pkg/apis/trigger/v1alpha1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/typed/apps/v1"
+
+	"github.com/mfojtik/trigger-controller/pkg/apis/trigger/v1alpha1"
 )
 
 type HandlerInterface interface {
@@ -64,12 +66,14 @@ func (h *DeploymentHandler) Handle(namespace, deploymentName string) error {
 			case h.namespace + "/" + h.configMapName:
 				if value == h.hash {
 					// No-op, the hashes are unchanged, return early
+					glog.V(3).Infof("Deployment %s/%s already has up to date configMap %s", namespace, deploymentName, h.configMapName)
 					return nil
 				}
 				annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"/"+h.namespace+"/"+h.configMapName] = h.hash
 				isUpdate = true
 			case h.namespace + "/" + h.secretName:
 				if value == h.hash {
+					glog.V(3).Infof("Deployment %s/%s already has up to date secret %s", namespace, deploymentName, h.secretName)
 					// No-op, the hashes are unchanged, return early
 					return nil
 				}
