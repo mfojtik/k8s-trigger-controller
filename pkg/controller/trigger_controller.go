@@ -75,7 +75,6 @@ func NewTriggerController(
 		workqueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "data-version"),
 		recorder:         recorder,
 	}
-	glog.V(3).Infof("Deployment %s/%s already has up to date secret %s", namespace, deploymentName, h.secretName)
 
 	controller.configMapsSynced = configMapInformer.Informer().HasSynced
 	controller.secretsSynced = secretInformer.Informer().HasSynced
