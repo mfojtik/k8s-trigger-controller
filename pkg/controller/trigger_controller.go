@@ -290,10 +290,7 @@ func (c *TriggerController) syncHandler(key string) error {
 	newDataHash := calculateDataHash(obj)
 	oldDataHash := objMeta.GetAnnotations()[v1alpha1.TriggerDataHashAnnotation]
 
-	if newDataHash == oldDataHash {
-		glog.V(5).Infof("No change detected in hash for %s/%s", objMeta.GetNamespace(), objMeta.GetName())
-		return nil
-	} else {
+	if newDataHash != oldDataHash {
 		switch kind {
 		case "configMap":
 			objCopy := obj.(*corev1.ConfigMap).DeepCopy()
@@ -316,6 +313,8 @@ func (c *TriggerController) syncHandler(key string) error {
 				return err
 			}
 		}
+	} else {
+		glog.V(5).Infof("No change detected in hash for %s/%s", objMeta.GetNamespace(), objMeta.GetName())
 	}
 
 	deployments, err := triggeredDeployments(obj)
