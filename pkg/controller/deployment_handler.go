@@ -63,21 +63,21 @@ func (h *DeploymentHandler) Handle(namespace, deploymentName string) error {
 		if strings.HasPrefix(name, v1alpha1.TriggerByDeploymentSourceAnnotationPrefix) {
 			c := strings.TrimPrefix(name, v1alpha1.TriggerByDeploymentSourceAnnotationPrefix)
 			switch c {
-			case h.namespace + "/" + h.configMapName:
+			case h.namespace + "." + h.configMapName:
 				if value == h.hash {
 					// No-op, the hashes are unchanged, return early
 					glog.V(3).Infof("Deployment %s/%s already has up to date configMap %s", namespace, deploymentName, h.configMapName)
 					return nil
 				}
-				annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"/"+h.namespace+"/"+h.configMapName] = h.hash
+				annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"."+h.namespace+"."+h.configMapName] = h.hash
 				isUpdate = true
-			case h.namespace + "/" + h.secretName:
+			case h.namespace + "." + h.secretName:
 				if value == h.hash {
 					glog.V(3).Infof("Deployment %s/%s already has up to date secret %s", namespace, deploymentName, h.secretName)
 					// No-op, the hashes are unchanged, return early
 					return nil
 				}
-				annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"/"+h.namespace+"/"+h.secretName] = h.hash
+				annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"."+h.namespace+"."+h.secretName] = h.hash
 				isUpdate = true
 			default:
 				glog.Infof("Invalid %s annotation format in %s/%s", v1alpha1.TriggerByDeploymentSourceAnnotationPrefix, namespace, deploymentName)
@@ -92,10 +92,10 @@ func (h *DeploymentHandler) Handle(namespace, deploymentName string) error {
 	// If the deployment does not have the annotation set, then set it (probably the secret/configMap just started to trigger now)
 	if !isUpdate {
 		if len(h.configMapName) > 0 {
-			annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"/"+h.namespace+"/"+h.configMapName] = h.hash
+			annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"."+h.namespace+"."+h.configMapName] = h.hash
 		}
 		if len(h.secretName) > 0 {
-			annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"/"+h.namespace+"/"+h.secretName] = h.hash
+			annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"."+h.namespace+"."+h.secretName] = h.hash
 		}
 	}
 
