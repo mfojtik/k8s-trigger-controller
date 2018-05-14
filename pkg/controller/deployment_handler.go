@@ -79,9 +79,6 @@ func (h *DeploymentHandler) Handle(namespace, deploymentName string) error {
 				}
 				annotations[v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+"."+h.namespace+"."+h.secretName] = h.hash
 				isUpdate = true
-			default:
-				glog.Infof("Invalid %s annotation format in %s/%s", v1alpha1.TriggerByDeploymentSourceAnnotationPrefix, namespace, deploymentName)
-				return nil
 			}
 			if isUpdate {
 				break
