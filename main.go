@@ -25,6 +25,8 @@ func init() {
 }
 
 func main() {
+	flag.Parse()
+
 	stopCh := signals.SetupSignalHandler()
 
 	cfg, err := clientcmd.BuildConfigFromFlags(masterURL, kubeconfig)
