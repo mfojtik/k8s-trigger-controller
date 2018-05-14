@@ -219,7 +219,7 @@ func calculateDataHash(obj interface{}) string {
 	var sortedMapKeys []string
 	hash := sha1.New()
 	switch t := obj.(type) {
-	case corev1.Secret:
+	case *corev1.Secret:
 		for k := range t.Data {
 			sortedMapKeys = append(sortedMapKeys, k)
 		}
@@ -228,7 +228,7 @@ func calculateDataHash(obj interface{}) string {
 		for _, key := range sortedMapKeys {
 			hash.Write(t.Data[key])
 		}
-	case corev1.ConfigMap:
+	case *corev1.ConfigMap:
 		for k := range t.Data {
 			sortedMapKeys = append(sortedMapKeys, k)
 		}
@@ -237,6 +237,8 @@ func calculateDataHash(obj interface{}) string {
 		for _, key := range sortedMapKeys {
 			hash.Write([]byte(t.Data[key]))
 		}
+	default:
+		runtimeutil.HandleError(fmt.Errorf("unknown object: %v", obj))
 	}
 	return hex.EncodeToString(hash.Sum(nil))
 }
