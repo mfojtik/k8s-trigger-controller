@@ -11,7 +11,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/sample-controller/pkg/signals"
 
-	"github.com/mfojtik/trigger-controller/pkg/controller"
+	"github.com/mfojtik/k8s-trigger-controller/pkg/controller"
 )
 
 var (

@@ -26,7 +26,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/client-go/util/workqueue"
 
-	"github.com/mfojtik/trigger-controller/pkg/apis/trigger/v1alpha1"
+	"github.com/mfojtik/k8s-trigger-controller/pkg/apis/trigger/v1alpha1"
 )
 
 const (

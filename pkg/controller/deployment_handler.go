@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/typed/apps/v1"
 
-	"github.com/mfojtik/trigger-controller/pkg/apis/trigger/v1alpha1"
+	"github.com/mfojtik/k8s-trigger-controller/pkg/apis/trigger/v1alpha1"
 )
 
 type HandlerInterface interface {
