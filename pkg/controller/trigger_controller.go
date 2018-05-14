@@ -201,7 +201,7 @@ func (c *TriggerController) enqueueObject(prefix string, old, new interface{}) {
 	if len(deployments) == 0 {
 		return
 	}
-	glog.V(5).Infof("enqueuing %s%#v", prefix, new)
+	glog.V(5).Infof("processing %s%s ...", prefix, key)
 	c.workqueue.AddRateLimited(prefix + key)
 }
 
