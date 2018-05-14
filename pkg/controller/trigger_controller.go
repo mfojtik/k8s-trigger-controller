@@ -169,7 +169,7 @@ func triggeredDeployments(obj interface{}) ([]triggerDefinition, error) {
 	if annotations := objectMeta.GetAnnotations(); annotations != nil {
 		for name, value := range annotations {
 			if strings.HasPrefix(name, v1alpha1.TriggerDeploymentAnnotationPrefix) {
-				deploymentName := strings.TrimPrefix(name, v1alpha1.TriggerDeploymentAnnotationPrefix)
+				deploymentName := strings.TrimPrefix(name, v1alpha1.TriggerDeploymentAnnotationPrefix+".")
 				parts := strings.Split(deploymentName, ".")
 				if len(parts) != 2 {
 					continue

@@ -61,7 +61,7 @@ func (h *DeploymentHandler) Handle(namespace, deploymentName string) error {
 	isUpdate := false
 	for name, value := range annotations {
 		if strings.HasPrefix(name, v1alpha1.TriggerByDeploymentSourceAnnotationPrefix) {
-			c := strings.TrimPrefix(name, v1alpha1.TriggerByDeploymentSourceAnnotationPrefix)
+			c := strings.TrimPrefix(name, v1alpha1.TriggerByDeploymentSourceAnnotationPrefix+".")
 			switch c {
 			case h.namespace + "." + h.configMapName:
 				if value == h.hash {
