@@ -337,7 +337,7 @@ func (c *TriggerController) syncHandler(key string) error {
 			glog.V(3).Infof("Trigger for %s/%s is not enabled, skipping", objMeta.GetNamespace(), objMeta.GetName())
 			continue
 		}
-		name, namespace, err := cache.SplitMetaNamespaceKey(d.Name)
+		namespace, name, err := cache.SplitMetaNamespaceKey(d.Name)
 		glog.V(3).Infof("Checking if deployment %s/%s hash for %s/%s is %v", namespace, name, objMeta.GetNamespace(), objMeta.GetName(), newDataHash)
 		if err != nil {
 			runtimeutil.HandleError(err)
