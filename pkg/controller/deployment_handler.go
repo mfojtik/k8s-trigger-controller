@@ -96,6 +96,8 @@ func (h *DeploymentHandler) Handle(namespace, deploymentName string) error {
 		}
 	}
 
+	glog.V(3).Infof("Updating deployment %s/%s", namespace, deploymentName)
+
 	// We need to update the hash for the secret/configMap
 	dCopy := d.DeepCopy()
 	dCopy.Spec.Template.Annotations = annotations
