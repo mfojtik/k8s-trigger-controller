@@ -56,7 +56,8 @@ type TriggerController struct {
 	secretsLister v1.SecretLister
 	secretsSynced cache.InformerSynced
 
-	deploymentClient appsv1client.DeploymentsGetter
+	deploymentClient  appsv1client.DeploymentsGetter
+	deploymentsSynced cache.InformerSynced
 
 	deploymentsIndex cache.Indexer
 
@@ -89,6 +90,7 @@ func NewTriggerController(
 
 	controller.configMapsSynced = configMapInformer.Informer().HasSynced
 	controller.secretsSynced = secretInformer.Informer().HasSynced
+	controller.deploymentsSynced = deploymentInformer.Informer().HasSynced
 
 	deploymentInformer.Informer().AddIndexers(cache.Indexers{
 		"configMap": indexDeploymentsByTriggeringConfigMaps,
@@ -172,7 +174,7 @@ func (c *TriggerController) Run(threadiness int, stopCh <-chan struct{}) error {
 
 	// Wait for the caches to be synced before starting workers
 	glog.Info("Waiting for informer caches to sync ...")
-	if ok := cache.WaitForCacheSync(stopCh, c.configMapsSynced, c.secretsSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.configMapsSynced, c.secretsSynced, c.deploymentsSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -214,7 +216,6 @@ func (c *TriggerController) processNextWorkItem() bool {
 			return fmt.Errorf("error syncing '%s': %s", key, syncErr.Error())
 		}
 		c.workqueue.Forget(obj)
-		glog.Infof("Successfully synced '%s'", key)
 		return nil
 	}(obj)
 	if err != nil {
@@ -324,7 +325,7 @@ func (c *TriggerController) syncHandler(key string) error {
 
 	// No triggers active for this secret/configMap
 	if len(toTrigger) == 0 {
-		glog.V(5).Infof("%s %q is not triggering any deployment")
+		glog.V(5).Infof("%s %q is not triggering any deployment", kind, objMeta.GetName())
 		return nil
 	}
 
