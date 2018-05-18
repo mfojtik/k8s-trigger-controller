@@ -336,6 +336,9 @@ func (c *TriggerController) syncHandler(key string) error {
 		switch kind {
 		case "configMap":
 			objCopy := obj.(*corev1.ConfigMap).DeepCopy()
+			if objCopy.Annotations == nil {
+				objCopy.Annotations = map[string]string{}
+			}
 			objCopy.Annotations[dataHashAnnotation] = newDataHash
 			glog.V(3).Infof("Updating configMap %s/%s with new data hash: %v", objCopy.Namespace, objCopy.Name, newDataHash)
 			if _, err := c.client.CoreV1().ConfigMaps(objCopy.Namespace).Update(objCopy); err != nil {
@@ -346,6 +349,9 @@ func (c *TriggerController) syncHandler(key string) error {
 			}
 		case "secret":
 			objCopy := obj.(*corev1.Secret).DeepCopy()
+			if objCopy.Annotations == nil {
+				objCopy.Annotations = map[string]string{}
+			}
 			objCopy.Annotations[dataHashAnnotation] = newDataHash
 			glog.V(3).Infof("Updating secret %s/%s with new data hash: %v", objCopy.Namespace, objCopy.Name, newDataHash)
 			if _, err := c.client.CoreV1().Secrets(objCopy.Namespace).Update(objCopy); err != nil {
