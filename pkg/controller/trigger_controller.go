@@ -325,7 +325,7 @@ func (c *TriggerController) syncHandler(key string) error {
 
 	// No triggers active for this secret/configMap
 	if len(toTrigger) == 0 {
-		glog.V(5).Infof("%s %q is not triggering any deployment", kind, objMeta.GetName())
+		// noisy: glog.V(5).Infof("%s %q is not triggering any deployment", kind, objMeta.GetName())
 		return nil
 	}
 
