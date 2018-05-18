@@ -362,7 +362,7 @@ func (c *TriggerController) syncHandler(key string) error {
 			}
 		}
 	} else {
-		glog.V(5).Infof("No change detected in hash for %s/%s", objMeta.GetNamespace(), objMeta.GetName())
+		glog.V(5).Infof("No change detected in hash for %s %s/%s", kind, objMeta.GetNamespace(), objMeta.GetName())
 	}
 
 	// Determine whether to trigger these deployments
