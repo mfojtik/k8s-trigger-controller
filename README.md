@@ -1,4 +1,4 @@
-[![Travis](https://travis-ci.org/mfojtik/k8s-trigger-controller.svg?branch=master)](https://travis-ci.org/mfojtik/k8s-trigger-controller)
+[![Travis](https://api.travis-ci.org/mfojtik/k8s-trigger-controller.svg?branch=master)](https://travis-ci.org/mfojtik/k8s-trigger-controller)
 [![Licensed under Apache License version 2.0](https://img.shields.io/github/license/openshift/origin.svg?maxAge=2592000)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Docker Automated Build](https://img.shields.io/docker/build/mfojtik/k8s-trigger-controller.svg)](https://hub.docker.com/r/mfojtik/k8s-trigger-controller/)
 # k8s-trigger-controller
