@@ -375,15 +375,9 @@
   packages = ["pkg/util/proto"]
   revision = "61db125d227fc9d4e373819a059516f32f7f23c7"
 
-[[projects]]
-  branch = "master"
-  name = "k8s.io/sample-controller"
-  packages = ["pkg/signals"]
-  revision = "8a66ce0ffe34fd4748b390010634bc9017d24d6e"
-
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "587f75d192b9abaebb92b6f63b848c5b411eeb33a78842eeaaed6a08aee16e8d"
+  inputs-digest = "ba5beacc79926ae1cc84528c25ec8f5c85793c43ff5caa2ac779d54305d40b7e"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -9,9 +9,9 @@ import (
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/sample-controller/pkg/signals"
 
 	"github.com/mfojtik/k8s-trigger-controller/pkg/controller"
+	"github.com/mfojtik/k8s-trigger-controller/pkg/signals"
 )
 
 var (
@@ -45,6 +45,6 @@ func main() {
 	go kubeInformerFactory.Start(stopCh)
 
 	if err = triggerController.Run(2, stopCh); err != nil {
-		glog.Fatalf("Error running hash controller: %s", err.Error())
+		glog.Fatalf("Error running controller: %s", err.Error())
 	}
 }

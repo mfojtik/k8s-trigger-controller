@@ -14,10 +14,6 @@
   name = "k8s.io/apimachinery"
   branch = "release-1.10"
 
-[[constraint]]
-  branch = "master"
-  name = "k8s.io/sample-controller"
-
 [prune]
   go-tests = true
   unused-packages = true
