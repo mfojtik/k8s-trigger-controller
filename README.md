@@ -7,6 +7,8 @@ This Kubernetes controller, when installed will let users to configure Secret or
 names on Deployments that should trigger a rollout of this Deployment when the data inside
 the Secret or ConfigMap change.
 
+Demo: https://youtu.be/SRDsRZwAdlA
+
 ## Installation
 
 On Kubernetes, you can run the controller image:
