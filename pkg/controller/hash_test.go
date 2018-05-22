@@ -9,12 +9,14 @@ import (
 func fakeSecret(mutateFn func(s *corev1.Secret)) *corev1.Secret {
 	s := &corev1.Secret{}
 	s.Name = "fake-secret"
+	s.Namespace = "test"
 	mutateFn(s)
 	return s
 }
 func fakeConfig(mutateFn func(s *corev1.ConfigMap)) *corev1.ConfigMap {
 	s := &corev1.ConfigMap{}
 	s.Name = "fake-config-map"
+	s.Namespace = "test"
 	mutateFn(s)
 	return s
 }

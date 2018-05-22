@@ -67,6 +67,8 @@ type TriggerController struct {
 
 	workqueue workqueue.RateLimitingInterface
 	recorder  record.EventRecorder
+
+	calculateDataHashFn func(interface{}) string
 }
 
 // NewTriggerController returns a new trigger controller
@@ -84,12 +86,13 @@ func NewTriggerController(
 	recorder := eventBroadcaster.NewRecorder(scheme.Scheme, corev1.EventSource{Component: controllerAgentName})
 
 	controller := &TriggerController{
-		client:           kubeclientset,
-		deploymentClient: kubeclientset.AppsV1(),
-		workqueue:        workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "data-version"),
-		recorder:         recorder,
-		secretsLister:    secretInformer.Lister(),
-		configMapsLister: configMapInformer.Lister(),
+		client:              kubeclientset,
+		deploymentClient:    kubeclientset.AppsV1(),
+		workqueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "data-version"),
+		recorder:            recorder,
+		secretsLister:       secretInformer.Lister(),
+		configMapsLister:    configMapInformer.Lister(),
+		calculateDataHashFn: calculateDataHash,
 	}
 
 	controller.configMapsSynced = configMapInformer.Informer().HasSynced
@@ -303,7 +306,7 @@ func (c *TriggerController) syncHandler(key string) error {
 		return nil
 	}
 
-	newDataHash := calculateDataHash(obj)
+	newDataHash := c.calculateDataHashFn(obj)
 	// The secret/configMap is empty
 	// TODO: Should this trigger?
 	if len(newDataHash) == 0 {
@@ -362,7 +365,7 @@ func (c *TriggerController) syncHandler(key string) error {
 		if annotations == nil {
 			annotations = map[string]string{}
 		}
-		triggerAnnotationKey := lastHashAnnotation(kind, dMeta.GetName())
+		triggerAnnotationKey := lastHashAnnotation(kind, objMeta.GetName())
 		if hash, exists := annotations[triggerAnnotationKey]; exists && hash == newDataHash {
 			glog.V(3).Infof("Deployment %s/%s already have latest %s %q", d.Namespace, d.Name, kind, objMeta.GetName())
 			continue
