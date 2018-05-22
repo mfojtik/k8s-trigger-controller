@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/golang/glog"
-	"k8s.io/apimachinery/pkg/util/sets"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -15,6 +14,7 @@ import (
 	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	errorsutil "k8s.io/apimachinery/pkg/util/errors"
 	runtimeutil "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -41,6 +41,13 @@ const (
 	// triggerConfigMapsAnnotation is a deployment annotation that contains a comma separated list of configMaps names that this deployment should
 	// be automatically triggered when the content of those configMaps is changed.
 	triggerConfigMapsAnnotation = "trigger.k8s.io/triggering-configMaps"
+)
+
+var (
+	// lastHashAnnotation is a deployment replicaset template annotation that contains last SHA256 hash of the secret or configMap
+	lastHashAnnotation = func(kind, name string) string {
+		return fmt.Sprintf("trigger.k8s.io/%s-%s-last-hash", kind, name)
+	}
 )
 
 // TriggerController is the controller implementation for Foo resources
@@ -352,20 +359,17 @@ func (c *TriggerController) syncHandler(key string) error {
 		glog.V(3).Infof("Processing deployment %s/%s that tracks %s %s ...", d.Namespace, d.Name, kind, objMeta.GetName())
 
 		annotations := d.Spec.Template.Annotations
-		triggerAnnotationKey := lasHashAnnotation(kind, dMeta)
 		if annotations == nil {
-			annotations = map[string]string{
-				triggerAnnotationKey: newDataHash,
-			}
-			glog.V(3).Infof("Deployment %s/%s now triggers on %s %q updates and will now rollout", d.Namespace, d.Name, kind, objMeta.GetName())
-		} else {
-			if hash, exists := annotations[triggerAnnotationKey]; exists && hash == newDataHash {
-				glog.V(3).Infof("Deployment %s/%s already have latest %s %q", d.Namespace, d.Name, kind, objMeta.GetName())
-				continue
-			}
-			glog.V(3).Infof("Deployment %s/%s has old %s %q and will rollout", d.Namespace, d.Name, kind, objMeta.GetName())
-			annotations[triggerAnnotationKey] = newDataHash
+			annotations = map[string]string{}
 		}
+		triggerAnnotationKey := lastHashAnnotation(kind, dMeta.GetName())
+		if hash, exists := annotations[triggerAnnotationKey]; exists && hash == newDataHash {
+			glog.V(3).Infof("Deployment %s/%s already have latest %s %q", d.Namespace, d.Name, kind, objMeta.GetName())
+			continue
+		}
+
+		glog.V(3).Infof("Deployment %s/%s has old %s %q and will rollout", d.Namespace, d.Name, kind, objMeta.GetName())
+		annotations[triggerAnnotationKey] = newDataHash
 
 		dCopy := d.DeepCopy()
 		dCopy.Spec.Template.Annotations = annotations
@@ -380,9 +384,4 @@ func (c *TriggerController) syncHandler(key string) error {
 	}
 
 	return nil
-}
-
-// lasHashAnnotation produce the annotation used to store the last hash in deployment.
-func lasHashAnnotation(kind string, objMeta meta_v1.Object) string {
-	return fmt.Sprintf("trigger.k8s.io/%s-%s-last-hash", kind, objMeta.GetName())
 }
