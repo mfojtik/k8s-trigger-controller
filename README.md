@@ -1,3 +1,6 @@
+[![Travis](https://travis-ci.org/mfojtik/k8s-trigger-controller.svg?branch=master)](https://travis-ci.org/mfojtik/k8s-trigger-controller)
+[![Licensed under Apache License version 2.0](https://img.shields.io/github/license/openshift/origin.svg?maxAge=2592000)](https://www.apache.org/licenses/LICENSE-2.0)
+
 # k8s-trigger-controller
 
 This Kubernetes controller, when installed will let users to configure Secret or ConfigMap
