@@ -12,3 +12,4 @@ gobuild_args: -race
 
 script:
   - go get github.com/mfojtik/k8s-trigger-controller
+  - go test -v ./... -race

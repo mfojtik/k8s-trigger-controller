@@ -1,10 +1,7 @@
 package controller
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -241,36 +238,6 @@ func (c *TriggerController) enqueueSecret(old, new interface{}) {
 	c.enqueueObject(secretPrefix, old, new)
 }
 
-// calculateDataHash calculates a hash from the map[string]string
-// TODO: This might be inefficient, there should be a better way to get a checksum for the current data.
-func calculateDataHash(obj interface{}) string {
-	var sortedMapKeys []string
-	hash := sha1.New()
-	switch t := obj.(type) {
-	case *corev1.Secret:
-		for k := range t.Data {
-			sortedMapKeys = append(sortedMapKeys, k)
-		}
-		sort.Strings(sortedMapKeys)
-		hash.Write([]byte(strings.Join(sortedMapKeys, "")))
-		for _, key := range sortedMapKeys {
-			hash.Write(t.Data[key])
-		}
-	case *corev1.ConfigMap:
-		for k := range t.Data {
-			sortedMapKeys = append(sortedMapKeys, k)
-		}
-		sort.Strings(sortedMapKeys)
-		hash.Write([]byte(strings.Join(sortedMapKeys, "")))
-		for _, key := range sortedMapKeys {
-			hash.Write([]byte(t.Data[key]))
-		}
-	default:
-		runtimeutil.HandleError(fmt.Errorf("unknown object: %v", obj))
-	}
-	return hex.EncodeToString(hash.Sum(nil))
-}
-
 func (c *TriggerController) syncHandler(key string) error {
 	parts := strings.Split(key, "#")
 	if len(parts) != 2 {
@@ -330,6 +297,11 @@ func (c *TriggerController) syncHandler(key string) error {
 	}
 
 	newDataHash := calculateDataHash(obj)
+	// The secret/configMap is empty
+	// TODO: Should this trigger?
+	if len(newDataHash) == 0 {
+		return nil
+	}
 	oldDataHash := objMeta.GetAnnotations()[dataHashAnnotation]
 
 	if newDataHash != oldDataHash {
@@ -380,7 +352,7 @@ func (c *TriggerController) syncHandler(key string) error {
 		glog.V(3).Infof("Processing deployment %s/%s that tracks %s %s ...", d.Namespace, d.Name, kind, objMeta.GetName())
 
 		annotations := d.Spec.Template.Annotations
-		triggerAnnotationKey := triggeredByAnnotation(kind, dMeta)
+		triggerAnnotationKey := lasHashAnnotation(kind, dMeta)
 		if annotations == nil {
 			annotations = map[string]string{
 				triggerAnnotationKey: newDataHash,
@@ -410,6 +382,7 @@ func (c *TriggerController) syncHandler(key string) error {
 	return nil
 }
 
-func triggeredByAnnotation(kind string, objMeta meta_v1.Object) string {
+// lasHashAnnotation produce the annotation used to store the last hash in deployment.
+func lasHashAnnotation(kind string, objMeta meta_v1.Object) string {
 	return fmt.Sprintf("trigger.k8s.io/%s-%s-last-hash", kind, objMeta.GetName())
 }
