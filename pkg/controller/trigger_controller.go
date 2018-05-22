@@ -31,7 +31,7 @@ import (
 )
 
 const (
-	controllerAgentName = "hash-controller"
+	controllerAgentName = "trigger-controller"
 	configMapPrefix     = "configMap#"
 	secretPrefix        = "secret#"
 
