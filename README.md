@@ -59,18 +59,17 @@ the value of the *'foo'* key and save, you should see that a new rollout is trig
 
 ## How it works
 
-When the controller observe Deployment with `trigger.k8s.io/triggering-secrets` annotation, it will automatically
-calculate hash of the Secret 'data' field and store it inside the Secret `trigger.k8s.io/data-hash` annotation.
+When the controller observes a Deployment or StatefulSet with the `trigger.k8s.io/triggering-secrets` annotation, it will automatically calculate hash of the Secret 'data' field and store it inside the Secret `trigger.k8s.io/data-hash` annotation. It will behave similarly for configMaps via the `trigger.k8s.io/triggering-configMaps` annotation.
 
-The it look up the Deployment and check if the ReplicaSet template embedded inside Deployment contain
+Then it looks up the Deployment and checks if the ReplicaSet template embedded inside Deployment contain
 the `trigger.k8s.io/[secret|configMap]-NAME-last-hash` annotation. This annotation value represents the last
 observed hash. If the hash differs or the annotation is not present, the controller update the template
-with the current Secret or ConfigMap hash. Updating the Deployment template will cause the Deployment to
-rollout new version.
+with the current Secret or ConfigMap hash. Updating the template will cause the the Deployment or StatefulSet to
+rollout new version as per it's RollingUpdate configuration.
 
 ## Limitations && TODO
 
-* Currently only Deployments are supported, StatefulSets and DaemonSets is TBD
+* Currently only Deployments and StatefulSets are supported, DaemonSets are TBD
 * If secrets or configMaps are updated in bulk, the controller might trigger rollout for every update (you should pause the Deployment in that case)
 * The hash calculation should be more efficient
 * Versioning of ConfigMaps and Secrets is out of scope for this controller

@@ -6,6 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/informers"
@@ -14,48 +15,198 @@ import (
 	"k8s.io/client-go/tools/cache"
 )
 
-func fakeDeployment(mutateFn func(d *appsv1.Deployment)) *appsv1.Deployment {
-	d := &appsv1.Deployment{}
-	d.Namespace = "test"
-	d.Name = "fake-deployment"
-	mutateFn(d)
-	return d
+type triggerCase struct {
+	name string
+
+	secret      *corev1.Secret
+	configMap   *corev1.ConfigMap
+	deployment  *appsv1.Deployment
+	statefulSet *appsv1.StatefulSet
+
+	expectedHash string
 }
 
-func TestTriggerController(t *testing.T) {
-	secret := fakeSecret(func(s *corev1.Secret) {
-		s.Data = map[string][]byte{"foo": []byte("bar")}
-	})
-	deploy := fakeDeployment(func(d *appsv1.Deployment) {
-		d.Annotations = map[string]string{
-			triggerSecretsAnnotation: "fake-secret",
-		}
-		secretVolume := corev1.Volume{}
-		secretVolume.Secret = &corev1.SecretVolumeSource{SecretName: secret.Name}
-		d.Spec.Template.Spec.Volumes = []corev1.Volume{secretVolume}
-	})
-
-	kubeclient := fake.NewSimpleClientset([]runtime.Object{secret, deploy}...)
-	informerFactory := informers.NewSharedInformerFactory(kubeclient, 0)
-	controller := NewTriggerController(kubeclient, informerFactory)
-	fakeSecretWatch := watch.NewFake()
-	fakeDeploymentWatch := watch.NewFake()
-	kubeclient.PrependWatchReactor("secrets",
-		func(action clientgotesting.Action) (handled bool, ret watch.Interface, err error) {
-			return true, fakeSecretWatch, nil
-		})
-	kubeclient.PrependWatchReactor("deployments",
-		func(action clientgotesting.Action) (handled bool, ret watch.Interface, err error) {
-			return true, fakeDeploymentWatch, nil
-		})
-
+// stubTriggerControllerIndexers stubs the indexing related methods in the
+// TriggerController. Because we don't go through the regular synchronization
+// machinery to create these indexes. The method accounts for the conditional
+// presecence of deployments and/or statefulsets in the provided testCase.
+func stubTriggerControllerIndexers(testCase triggerCase, controller *TriggerController) {
 	controller.secretsSynced = func() bool { return true }
 	controller.configMapsSynced = func() bool { return true }
 	controller.deploymentsSynced = func() bool { return true }
+	controller.statefulSetsSynced = func() bool { return true }
 
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{"secret": indexDeploymentsByTriggeringSecrets})
-	indexer.Add(deploy)
-	controller.deploymentsIndex = indexer
+	controller.deploymentsIndex = cache.NewIndexer(
+		cache.MetaNamespaceKeyFunc,
+		cache.Indexers{
+			"secret":    indexBySecrets,
+			"configMap": indexByConfigMaps,
+		},
+	)
+	if testCase.deployment != nil {
+		controller.deploymentsIndex.Add(testCase.deployment)
+	}
+
+	controller.statefulSetsIndex = cache.NewIndexer(
+		cache.MetaNamespaceKeyFunc,
+		cache.Indexers{
+			"secret":    indexBySecrets,
+			"configMap": indexByConfigMaps,
+		},
+	)
+	if testCase.statefulSet != nil {
+		controller.statefulSetsIndex.Add(testCase.statefulSet)
+	}
+}
+
+// filterTriggerCaseRuntimeObjects is used to get a list of non-nil objects for
+// a given testCase. Generally used to populate the mock kubernetes client.
+func filterTriggerCaseRuntimeObjects(c *triggerCase) []runtime.Object {
+	objs := []runtime.Object{}
+	if c.configMap != nil {
+		objs = append(objs, c.configMap)
+	}
+	if c.secret != nil {
+		objs = append(objs, c.secret)
+	}
+	if c.deployment != nil {
+		objs = append(objs, c.deployment)
+	}
+	if c.statefulSet != nil {
+		objs = append(objs, c.statefulSet)
+	}
+	return objs
+}
+
+var triggerCases = []triggerCase{
+	triggerCase{
+		name: "secret with data and a single listening deployment",
+		secret: &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fake-deployment-secret",
+				Namespace: "test",
+			},
+			Data: map[string][]byte{
+				"hello": []byte("world"),
+			},
+		},
+		deployment: &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fake-deployment",
+				Namespace: "test",
+				Annotations: map[string]string{
+					triggerSecretsAnnotation: "fake-deployment-secret",
+				},
+			},
+		},
+		expectedHash: "trigger.k8s.io/secret-fake-deployment-secret-last-hash",
+	},
+	triggerCase{
+		name: "secret with data and a single listening statefulset",
+		secret: &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fake-statefulset-secret",
+				Namespace: "test",
+			},
+			Data: map[string][]byte{
+				"hello": []byte("world"),
+			},
+		},
+		statefulSet: &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fake-statefulset",
+				Namespace: "test",
+				Annotations: map[string]string{
+					triggerSecretsAnnotation: "fake-statefulset-secret",
+				},
+			},
+		},
+		expectedHash: "trigger.k8s.io/secret-fake-statefulset-secret-last-hash",
+	},
+	triggerCase{
+		name: "configMap with data and a single listening deployment",
+		configMap: &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fake-deployment-configmap",
+				Namespace: "test",
+			},
+			Data: map[string]string{
+				"hello": "world",
+			},
+		},
+		deployment: &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "fake-deployment",
+				Namespace: "test",
+				Annotations: map[string]string{
+					triggerConfigMapsAnnotation: "fake-deployment-configmap",
+				},
+			},
+		},
+		expectedHash: "trigger.k8s.io/configMap-fake-deployment-configmap-last-hash",
+	},
+}
+
+func TestTriggerControllerCases(t *testing.T) {
+	for _, c := range triggerCases {
+		t.Run(c.name, func(t *testing.T) {
+			objs := filterTriggerCaseRuntimeObjects(&c)
+			kubeclient := fake.NewSimpleClientset(objs...)
+
+			fakeSecretWatch := watch.NewFake()
+			kubeclient.PrependWatchReactor("secrets",
+				func(action clientgotesting.Action) (handled bool, ret watch.Interface, err error) {
+					return true, fakeSecretWatch, nil
+				},
+			)
+
+			fakeConfigMapWatch := watch.NewFake()
+			kubeclient.PrependWatchReactor("configmaps",
+				func(action clientgotesting.Action) (handled bool, ret watch.Interface, err error) {
+					return true, fakeConfigMapWatch, nil
+				},
+			)
+
+			fakeDeploymentWatch := watch.NewFake()
+			kubeclient.PrependWatchReactor("deployments",
+				func(action clientgotesting.Action) (handled bool, ret watch.Interface, err error) {
+					return true, fakeDeploymentWatch, nil
+				},
+			)
+
+			fakeStatefulSetWatch := watch.NewFake()
+			kubeclient.PrependWatchReactor("statefulsets",
+				func(action clientgotesting.Action) (handled bool, ret watch.Interface, err error) {
+					return true, fakeStatefulSetWatch, nil
+				},
+			)
+
+			informerFactory := informers.NewSharedInformerFactory(kubeclient, 0)
+			controller := NewTriggerController(kubeclient, informerFactory)
+			stubTriggerControllerIndexers(c, controller)
+
+			stopChannel := make(chan struct{})
+			defer close(stopChannel)
+			informerFactory.Start(stopChannel)
+			go controller.Run(2, stopChannel)
+
+			modifyAndAssertHashes(t, controller, c.expectedHash, func() {
+				if c.secret != nil {
+					fakeSecretWatch.Modify(c.secret)
+				}
+				if c.configMap != nil {
+					fakeConfigMapWatch.Modify(c.configMap)
+				}
+			})
+		})
+	}
+}
+
+// modifyAndAssertHashes instruments our hash-generating callback methods and
+// asserts that they've been called with appropriate values. This function is
+// not thread safe due to the patching of the controller instance.
+func modifyAndAssertHashes(t *testing.T, controller *TriggerController, desiredHash string, modifyFn func()) {
+	t.Helper()
 
 	hashCalculated := make(chan bool)
 	controller.calculateDataHashFn = func(obj interface{}) string {
@@ -63,35 +214,33 @@ func TestTriggerController(t *testing.T) {
 		return calculateDataHash(obj)
 	}
 
-	stopChannel := make(chan struct{})
-	defer close(stopChannel)
-	informerFactory.Start(stopChannel)
-	go controller.Run(2, stopChannel)
-
-	fakeSecretWatch.Modify(secret)
-
 	lastHashAnnotationSet := make(chan bool)
-	originLastHashAnnotation := lastHashAnnotation
+	originalLastHashAnnotation := lastHashAnnotation
+	// Restore our spied annotation generator.
+	defer func() { lastHashAnnotation = originalLastHashAnnotation }()
+
 	var lastHash string
 	lastHashAnnotation = func(kind, name string) string {
 		defer close(lastHashAnnotationSet)
-		lastHash = originLastHashAnnotation(kind, name)
+		lastHash = originalLastHashAnnotation(kind, name)
 		return lastHash
 	}
 
+	modifyFn()
+
 	select {
 	case <-hashCalculated:
-	case <-time.After(time.Duration(15 * time.Second)):
+	case <-time.After(time.Duration(1 * time.Second)):
 		t.Fatalf("failed to calculate hash")
 	}
 
 	select {
 	case <-lastHashAnnotationSet:
-	case <-time.After(time.Duration(15 * time.Second)):
-		t.Fatalf("failed to set deployment annotation")
+	case <-time.After(time.Duration(1 * time.Second)):
+		t.Fatalf("failed to set annotation")
 	}
 
-	if lastHash != "trigger.k8s.io/secret-fake-secret-last-hash" {
-		t.Fatalf("invalid lastHashAnnotation %q", lastHash)
+	if lastHash != desiredHash {
+		t.Fatalf("invalid lastHashAnnotation %q, wanted %q", lastHash, desiredHash)
 	}
 }

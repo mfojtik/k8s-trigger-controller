@@ -7,7 +7,6 @@ import (
 
 	"github.com/golang/glog"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -19,7 +18,6 @@ import (
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
-	appsv1client "k8s.io/client-go/kubernetes/typed/apps/v1"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -60,10 +58,11 @@ type TriggerController struct {
 	secretsLister v1.SecretLister
 	secretsSynced cache.InformerSynced
 
-	deploymentClient  appsv1client.DeploymentsGetter
-	deploymentsSynced cache.InformerSynced
+	deploymentsSynced  cache.InformerSynced
+	statefulSetsSynced cache.InformerSynced
 
-	deploymentsIndex cache.Indexer
+	deploymentsIndex  cache.Indexer
+	statefulSetsIndex cache.Indexer
 
 	workqueue workqueue.RateLimitingInterface
 	recorder  record.EventRecorder
@@ -79,6 +78,7 @@ func NewTriggerController(
 	configMapInformer := kubeInformerFactory.Core().V1().ConfigMaps()
 	secretInformer := kubeInformerFactory.Core().V1().Secrets()
 	deploymentInformer := kubeInformerFactory.Apps().V1().Deployments()
+	statefulSetInformer := kubeInformerFactory.Apps().V1().StatefulSets()
 
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(glog.Infof)
@@ -87,7 +87,6 @@ func NewTriggerController(
 
 	controller := &TriggerController{
 		client:              kubeclientset,
-		deploymentClient:    kubeclientset.AppsV1(),
 		workqueue:           workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "data-version"),
 		recorder:            recorder,
 		secretsLister:       secretInformer.Lister(),
@@ -98,12 +97,19 @@ func NewTriggerController(
 	controller.configMapsSynced = configMapInformer.Informer().HasSynced
 	controller.secretsSynced = secretInformer.Informer().HasSynced
 	controller.deploymentsSynced = deploymentInformer.Informer().HasSynced
+	controller.statefulSetsSynced = statefulSetInformer.Informer().HasSynced
 
 	deploymentInformer.Informer().AddIndexers(cache.Indexers{
-		"configMap": indexDeploymentsByTriggeringConfigMaps,
-		"secret":    indexDeploymentsByTriggeringSecrets,
+		"configMap": indexByConfigMaps,
+		"secret":    indexBySecrets,
 	})
 	controller.deploymentsIndex = deploymentInformer.Informer().GetIndexer()
+
+	statefulSetInformer.Informer().AddIndexers(cache.Indexers{
+		"configMap": indexByConfigMaps,
+		"secret":    indexBySecrets,
+	})
+	controller.statefulSetsIndex = statefulSetInformer.Informer().GetIndexer()
 
 	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(new interface{}) {
@@ -126,50 +132,30 @@ func NewTriggerController(
 	return controller
 }
 
-func indexDeploymentsByTriggeringConfigMaps(obj interface{}) ([]string, error) {
-	var configs []string
-	d, ok := obj.(*appsv1.Deployment)
-	if !ok {
-		return configs, fmt.Errorf("object is not deployment")
+func indexByConfigMaps(obj interface{}) ([]string, error) {
+	objMeta, err := meta.Accessor(obj)
+	if err != nil {
+		return []string{}, nil
 	}
-	annotations := d.GetAnnotations()
-	if len(annotations) == 0 {
-		return configs, nil
-	}
+
+	annotations := objMeta.GetAnnotations()
 	if triggers, ok := annotations[triggerConfigMapsAnnotation]; ok {
-		configMaps := sets.NewString(strings.Split(triggers, ",")...)
-		for _, v := range d.Spec.Template.Spec.Volumes {
-			if v.ConfigMap != nil {
-				if configMaps.Has(v.ConfigMap.Name) {
-					configs = append(configs, v.ConfigMap.Name)
-				}
-			}
-		}
+		return sets.NewString(strings.Split(triggers, ",")...).List(), nil
 	}
-	return configs, nil
+	return []string{}, nil
 }
 
-func indexDeploymentsByTriggeringSecrets(obj interface{}) ([]string, error) {
-	var configs []string
-	d, ok := obj.(*appsv1.Deployment)
-	if !ok {
-		return configs, fmt.Errorf("object is not deployment")
+func indexBySecrets(obj interface{}) ([]string, error) {
+	objMeta, err := meta.Accessor(obj)
+	if err != nil {
+		return []string{}, nil
 	}
-	annotations := d.GetAnnotations()
-	if len(annotations) == 0 {
-		return configs, nil
-	}
+
+	annotations := objMeta.GetAnnotations()
 	if triggers, ok := annotations[triggerSecretsAnnotation]; ok {
-		secrets := sets.NewString(strings.Split(triggers, ",")...)
-		for _, v := range d.Spec.Template.Spec.Volumes {
-			if v.Secret != nil {
-				if secrets.Has(v.Secret.SecretName) {
-					configs = append(configs, v.Secret.SecretName)
-				}
-			}
-		}
+		return sets.NewString(strings.Split(triggers, ",")...).List(), nil
 	}
-	return configs, nil
+	return []string{}, nil
 }
 
 func (c *TriggerController) Run(threadiness int, stopCh <-chan struct{}) error {
@@ -181,7 +167,7 @@ func (c *TriggerController) Run(threadiness int, stopCh <-chan struct{}) error {
 
 	// Wait for the caches to be synced before starting workers
 	glog.Info("Waiting for informer caches to sync ...")
-	if ok := cache.WaitForCacheSync(stopCh, c.configMapsSynced, c.secretsSynced, c.deploymentsSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.configMapsSynced, c.secretsSynced, c.deploymentsSynced, c.statefulSetsSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
@@ -294,18 +280,6 @@ func (c *TriggerController) syncHandler(key string) error {
 		runtimeutil.HandleError(err)
 	}
 
-	// Get all deployments that use the configMap or Secret
-	toTrigger, err := c.deploymentsIndex.ByIndex(kind, objMeta.GetName())
-	if err != nil {
-		return err
-	}
-
-	// No triggers active for this secret/configMap
-	if len(toTrigger) == 0 {
-		// noisy: glog.V(5).Infof("%s %q is not triggering any deployment", kind, objMeta.GetName())
-		return nil
-	}
-
 	newDataHash := c.calculateDataHashFn(obj)
 	// The secret/configMap is empty
 	// TODO: Should this trigger?
@@ -347,44 +321,98 @@ func (c *TriggerController) syncHandler(key string) error {
 		glog.V(5).Infof("No change detected in hash for %s %s/%s", kind, objMeta.GetNamespace(), objMeta.GetName())
 	}
 
-	// Determine whether to trigger these deployments
-	var triggerErrors []error
-	for _, obj := range toTrigger {
-		dMeta, err := meta.Accessor(obj)
-		if err != nil {
-			runtimeutil.HandleError(fmt.Errorf("failed to get accessor for %#v", err))
-			continue
-		}
-		d, err := c.client.AppsV1().Deployments(dMeta.GetNamespace()).Get(dMeta.GetName(), meta_v1.GetOptions{})
-		if err != nil {
-			runtimeutil.HandleError(fmt.Errorf("failed to get deployment %s/%s: %v", dMeta.GetNamespace(), dMeta.GetName(), err))
-		}
-		glog.V(3).Infof("Processing deployment %s/%s that tracks %s %s ...", d.Namespace, d.Name, kind, objMeta.GetName())
-
-		annotations := d.Spec.Template.Annotations
-		if annotations == nil {
-			annotations = map[string]string{}
-		}
-		triggerAnnotationKey := lastHashAnnotation(kind, objMeta.GetName())
-		if hash, exists := annotations[triggerAnnotationKey]; exists && hash == newDataHash {
-			glog.V(3).Infof("Deployment %s/%s already have latest %s %q", d.Namespace, d.Name, kind, objMeta.GetName())
-			continue
-		}
-
-		glog.V(3).Infof("Deployment %s/%s has old %s %q and will rollout", d.Namespace, d.Name, kind, objMeta.GetName())
-		annotations[triggerAnnotationKey] = newDataHash
-
-		dCopy := d.DeepCopy()
-		dCopy.Spec.Template.Annotations = annotations
-		if _, err := c.client.AppsV1().Deployments(d.Namespace).Update(dCopy); err != nil {
-			glog.Errorf("Failed to update deployment %s/%s: %v", d.Namespace, d.Name, err)
-			triggerErrors = append(triggerErrors, err)
-		}
+	// Get all deployments that use the configMap or Secret
+	triggeredDeploys, err := c.deploymentsIndex.ByIndex(kind, objMeta.GetName())
+	if err != nil {
+		return err
 	}
+
+	triggeredStatefulSets, err := c.statefulSetsIndex.ByIndex(kind, objMeta.GetName())
+	if err != nil {
+		return err
+	}
+
+	triggerErrors := []error{}
+	triggerErrors = append(triggerErrors, c.triggerDeployments(triggeredDeploys, kind, objMeta.GetName(), newDataHash)...)
+	triggerErrors = append(triggerErrors, c.triggerStatefulSets(triggeredStatefulSets, kind, objMeta.GetName(), newDataHash)...)
 
 	if len(triggerErrors) != 0 {
 		return errorsutil.NewAggregate(triggerErrors)
 	}
 
 	return nil
+}
+
+func (c *TriggerController) triggerDeployments(toTrigger []interface{}, kind string, name string, newDataHash string) []error {
+	var triggerErrors []error
+	for _, obj := range toTrigger {
+		rMeta, err := meta.Accessor(obj)
+		if err != nil {
+			runtimeutil.HandleError(fmt.Errorf("failed to get accessor for %#v", err))
+			continue
+		}
+		res, err := c.client.AppsV1().Deployments(rMeta.GetNamespace()).Get(rMeta.GetName(), meta_v1.GetOptions{})
+		if err != nil {
+			runtimeutil.HandleError(fmt.Errorf("failed to get deployment %s/%s: %v", rMeta.GetNamespace(), rMeta.GetName(), err))
+		}
+		glog.V(3).Infof("Processing deployment %s/%s that tracks %s %s ...", res.Namespace, res.Name, kind, name)
+
+		annotations := res.Spec.Template.Annotations
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		triggerAnnotationKey := lastHashAnnotation(kind, name)
+		if hash, exists := annotations[triggerAnnotationKey]; exists && hash == newDataHash {
+			glog.V(3).Infof("Deployment %s/%s already have latest %s %q", res.Namespace, res.Name, kind, name)
+			continue
+		}
+
+		glog.V(3).Infof("Deployment %s/%s has old %s %q and will rollout", res.Namespace, res.Name, kind, name)
+		annotations[triggerAnnotationKey] = newDataHash
+
+		resCopy := res.DeepCopy()
+		resCopy.Spec.Template.Annotations = annotations
+		if _, err := c.client.AppsV1().Deployments(res.Namespace).Update(resCopy); err != nil {
+			glog.Errorf("Failed to update deployment %s/%s: %v", res.Namespace, res.Name, err)
+			triggerErrors = append(triggerErrors, err)
+		}
+	}
+	return triggerErrors
+}
+
+func (c *TriggerController) triggerStatefulSets(toTrigger []interface{}, kind string, name string, newDataHash string) []error {
+	var triggerErrors []error
+	for _, obj := range toTrigger {
+		rMeta, err := meta.Accessor(obj)
+		if err != nil {
+			runtimeutil.HandleError(fmt.Errorf("failed to get accessor for %#v", err))
+			continue
+		}
+		res, err := c.client.AppsV1().StatefulSets(rMeta.GetNamespace()).Get(rMeta.GetName(), meta_v1.GetOptions{})
+		if err != nil {
+			runtimeutil.HandleError(fmt.Errorf("failed to get statefulset %s/%s: %v", rMeta.GetNamespace(), rMeta.GetName(), err))
+		}
+		glog.V(3).Infof("Processing statefulset %s/%s that tracks %s %s ...", res.Namespace, res.Name, kind, name)
+
+		annotations := res.Spec.Template.Annotations
+		if annotations == nil {
+			annotations = map[string]string{}
+		}
+		triggerAnnotationKey := lastHashAnnotation(kind, name)
+		if hash, exists := annotations[triggerAnnotationKey]; exists && hash == newDataHash {
+			glog.V(3).Infof("StatefulSet %s/%s already have latest %s %q", res.Namespace, res.Name, kind, name)
+			continue
+		}
+
+		glog.V(3).Infof("StatefulSet %s/%s has old %s %q and will rollout", res.Namespace, res.Name, kind, name)
+		annotations[triggerAnnotationKey] = newDataHash
+
+		resCopy := res.DeepCopy()
+		resCopy.Spec.Template.Annotations = annotations
+		if _, err := c.client.AppsV1().StatefulSets(res.Namespace).Update(resCopy); err != nil {
+			glog.Errorf("Failed to update statefulset %s/%s: %v", res.Namespace, res.Name, err)
+			triggerErrors = append(triggerErrors, err)
+		}
+	}
+	return triggerErrors
 }
